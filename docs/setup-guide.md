@@ -54,11 +54,11 @@ The response is a JSON array. The `id` field of the target workspace is the requ
 3. Click **Add Webhook**.
 4. Fill in the required fields:
 
-| Field | Value |
-|---|---|
-| Name | Any descriptive label (e.g., `WSync`) |
-| URL | The public endpoint where WSync will receive events. Example: `https://wsync.your-domain.com/webhook/clockify` |
-| Trigger | `Timer Stopped` (`TIMER_STOPPED`) |
+| Field   | Value                                                                                                          |
+|---------|----------------------------------------------------------------------------------------------------------------|
+| Name    | Any descriptive label (e.g., `WSync`)                                                                          |
+| URL     | The public endpoint where WSync will receive events. Example: `https://wsync.your-domain.com/webhook/clockify` |
+| Trigger | `Timer Stopped` (`TIMER_STOPPED`)                                                                              |
 
 5. After saving, Clockify displays a **Signing Secret**. Copy it immediately — it is shown only once.
 
@@ -86,7 +86,8 @@ The response is a JSON array. The `id` field of the target workspace is the requ
 2. Click **Create API token** and assign a label (e.g., `WSync`).
 3. Copy the generated token. It is shown only once.
 
-The token inherits the permissions of the associated Atlassian account. The account must have **Browse Projects** and **Log Work** permissions on all projects to be synced.
+The token inherits the permissions of the associated Atlassian account. The account must have **Browse Projects** and **Log Work**
+permissions on all projects to be synced.
 
 ### Base URL
 
@@ -120,7 +121,8 @@ Instance-wide (requires admin): **Jira Settings > Issues > Time Tracking**.
 
 ## 4. Cloudflare Tunnel
 
-Cloudflare Tunnel exposes a local port over a public HTTPS URL without opening firewall ports. This is required for Clockify to deliver webhook events to a local machine.
+Cloudflare Tunnel exposes a local port over a public HTTPS URL without opening firewall ports. This is required for Clockify to deliver
+webhook events to a local machine.
 
 ### Prerequisites
 
@@ -134,7 +136,8 @@ Cloudflare Tunnel exposes a local port over a public HTTPS URL without opening f
 cloudflared tunnel --url http://localhost:3100
 ```
 
-Generates a temporary URL such as `https://random-words.trycloudflare.com`. The URL changes on every restart, requiring the Clockify webhook URL to be updated each time.
+Generates a temporary URL such as `https://random-words.trycloudflare.com`. The URL changes on every restart, requiring the Clockify webhook
+URL to be updated each time.
 
 ### Option B: Named tunnel (permanent URL)
 
@@ -181,7 +184,8 @@ With a named tunnel the URL is stable and the Clockify webhook only needs to be 
 
 ## 5. Blacklist
 
-To exclude specific entries from synchronization, populate the `sync.blacklist` section of `config.json`. For field descriptions and instructions on finding Clockify IDs, see [config-reference.md](config-reference.md).
+To exclude specific entries from synchronization, populate the `sync.blacklist` section of `config.json`. For field descriptions and
+instructions on finding Clockify IDs, see [config-reference.md](config-reference.md).
 
 ---
 
@@ -201,7 +205,8 @@ Confirm the following in the startup output:
 
 If authentication errors appear, verify the credentials in `config.json`.
 
-When the webhook is shown as disabled, the service runs in polling-only mode. This is expected when `webhook.enabled` is `false` or the secret is not configured.
+When the webhook is shown as disabled, the service runs in polling-only mode. This is expected when `webhook.enabled` is `false` or the
+secret is not configured.
 
 ---
 
