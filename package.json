@@ -4,15 +4,20 @@
     "@types/bun": "latest",
     "ultracite": "7.7.0"
   },
-  "name": "jira-work-sync",
+  "name": "wsync",
   "peerDependencies": {
     "typescript": "^5"
   },
-  "type": "module",
-  "module": "index.ts",
-  "private": true,
   "scripts": {
-    "check": "ultracite check",
+    "start": "bun run src/index.ts start",
+    "dev": "bun --watch run src/index.ts start",
+    "status": "bun run src/index.ts status",
+    "typecheck": "tsc --noEmit",
     "fix": "ultracite fix"
-  }
+  },
+  "type": "module",
+  "version": "0.1.0",
+  "description": "Clockify -> Jira Time Sync",
+  "module": "src/index.ts",
+  "private": true
 }
