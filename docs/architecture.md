@@ -88,19 +88,20 @@ The server returns a response to Clockify immediately and processes the sync asy
 
 Runs a `setInterval` every `polling.intervalMinutes` minutes. On each tick:
 
-1. Reads `getLastSyncedTimestamp()` from the store to determine the search window.
+1. Computes `since = now - sync.lookbackWindow` as the fixed search window.
 2. Fetches completed entries from Clockify.
 3. Calls `engine.syncTimeEntry()` for each entry.
 4. Logs a cycle summary: `N checked, X synced, Y skipped, Z failed`.
 
-The first tick is delayed 30 seconds after startup.
+The first tick is delayed 30 seconds after startup. The same `runSyncCycle` function is also invoked from the one-shot path in
+`cli/start.ts` when both webhook and polling are disabled.
 
 ### `store/`
 
-| File                 | Responsibility                                                                                                                                   |
-|----------------------|--------------------------------------------------------------------------------------------------------------------------------------------------|
-| `database.ts`        | Opens the SQLite connection via `bun:sqlite`, creates the `sync_records` table if absent, exposes `getDatabase()`                                |
-| `sync-repository.ts` | CRUD operations on `sync_records`: `findByClockifyEntryId`, `createSyncRecord`, `updateSyncStatus`, `getRecentRecords`, `getLastSyncedTimestamp` |
+| File                 | Responsibility                                                                                                         |
+|----------------------|------------------------------------------------------------------------------------------------------------------------|
+| `database.ts`        | Opens the SQLite connection via `bun:sqlite`, creates the `sync_records` table if absent, exposes `getDatabase()`      |
+| `sync-repository.ts` | CRUD operations on `sync_records`: `findByClockifyEntryId`, `createSyncRecord`, `updateSyncStatus`, `getRecentRecords` |
 
 The database is initialized once in the `start` command and closed on shutdown.
 

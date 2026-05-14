@@ -29,6 +29,7 @@ For instructions on obtaining each credential, see [setup-guide.md](setup-guide.
     "intervalMinutes": 5
   },
   "sync": {
+    "lookbackWindow": "24h",
     "blacklist": {
       "jiraKeys": [],
       "clockifyProjectIds": [],
@@ -45,20 +46,20 @@ For instructions on obtaining each credential, see [setup-guide.md](setup-guide.
 
 ## `clockify` — Required
 
-| Field | Type | Description |
-|---|---|---|
-| `apiKey` | string | Clockify REST API key |
+| Field         | Type   | Description                               |
+|---------------|--------|-------------------------------------------|
+| `apiKey`      | string | Clockify REST API key                     |
 | `workspaceId` | string | ID of the Clockify workspace to sync from |
 
 ---
 
 ## `jira` — Required
 
-| Field | Type | Description |
-|---|---|---|
-| `baseUrl` | string | Base URL of the Jira Cloud instance (e.g., `https://company.atlassian.net`) |
-| `email` | string | Atlassian account email used for authentication |
-| `apiToken` | string | Jira Cloud API token |
+| Field      | Type   | Description                                                                 |
+|------------|--------|-----------------------------------------------------------------------------|
+| `baseUrl`  | string | Base URL of the Jira Cloud instance (e.g., `https://company.atlassian.net`) |
+| `email`    | string | Atlassian account email used for authentication                             |
+| `apiToken` | string | Jira Cloud API token                                                        |
 
 ---
 
@@ -66,11 +67,11 @@ For instructions on obtaining each credential, see [setup-guide.md](setup-guide.
 
 Controls the HTTP server that receives `TIMER_STOPPED` events from Clockify.
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | boolean | `false` | Whether to start the webhook server |
-| `port` | number | `3100` | Local port the server listens on |
-| `secret` | string | — | Clockify webhook signing secret. Required when `enabled` is `true` |
+| Field     | Type    | Default | Description                                                        |
+|-----------|---------|---------|--------------------------------------------------------------------|
+| `enabled` | boolean | `false` | Whether to start the webhook server                                |
+| `port`    | number  | `3100`  | Local port the server listens on                                   |
+| `secret`  | string  | —       | Clockify webhook signing secret. Required when `enabled` is `true` |
 
 When `enabled` is `false`, the service runs in polling-only mode. The `webhook` section is still parsed but the server is not started.
 
@@ -78,10 +79,10 @@ Validation at startup will fail if `enabled` is `true` and `secret` is missing o
 
 Exposed endpoints when enabled:
 
-| Method | Path | Description |
-|---|---|---|
-| POST | `/webhook/clockify` | Receives Clockify webhook events |
-| GET | `/health` | Returns `{ "status": "ok", "uptime": <seconds> }` |
+| Method | Path                | Description                                       |
+|--------|---------------------|---------------------------------------------------|
+| POST   | `/webhook/clockify` | Receives Clockify webhook events                  |
+| GET    | `/health`           | Returns `{ "status": "ok", "uptime": <seconds> }` |
 
 ---
 
@@ -89,12 +90,26 @@ Exposed endpoints when enabled:
 
 Controls the periodic background poller.
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `enabled` | boolean | `true` | Whether to run the background poller |
-| `intervalMinutes` | number | `5` | Polling interval in minutes |
+| Field             | Type    | Default | Description                          |
+|-------------------|---------|---------|--------------------------------------|
+| `enabled`         | boolean | `true`  | Whether to run the background poller |
+| `intervalMinutes` | number  | `5`     | Polling interval in minutes          |
 
-The first poll runs 30 seconds after startup. Each cycle looks back to the `started_at` timestamp of the last successful sync record, or to 24 hours ago if no record exists.
+The first poll runs 30 seconds after startup. Each cycle considers entries within the configured `sync.lookbackWindow` (see below).
+
+When both `polling.enabled` and `webhook.enabled` are `false`, the service runs a single sync cycle and exits — the **one-shot mode**.
+
+---
+
+## `sync` — Optional
+
+| Field            | Type   | Default | Description                                                                                                                                                                                 |
+|------------------|--------|---------|---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
+| `lookbackWindow` | string | `"24h"` | How far back to fetch time entries on each sync cycle, counted from "now". Accepts a positive integer followed by a unit: `s`, `m`, `h`, `d`, `w` (e.g., `"30m"`, `"1h"`, `"24h"`, `"7d"`). |
+
+The window is applied as a fixed window from the current time — the last successful sync timestamp is **not** used to narrow the window.
+Deduplication (local DB + Jira worklog properties) ensures the same entry is not synced twice even when the window overlaps with previously
+synced entries.
 
 ---
 
@@ -102,11 +117,11 @@ The first poll runs 30 seconds after startup. Each cycle looks back to the `star
 
 Prevents specific entries from being synced regardless of their metadata.
 
-| Field | Type | Default | Description |
-|---|---|---|---|
-| `jiraKeys` | string[] | `[]` | Jira issue keys to exclude (e.g., `["INTERNAL-001"]`) |
-| `clockifyProjectIds` | string[] | `[]` | Clockify project IDs to exclude |
-| `clockifyTaskIds` | string[] | `[]` | Clockify task IDs to exclude |
+| Field                | Type     | Default | Description                                           |
+|----------------------|----------|---------|-------------------------------------------------------|
+| `jiraKeys`           | string[] | `[]`    | Jira issue keys to exclude (e.g., `["INTERNAL-001"]`) |
+| `clockifyProjectIds` | string[] | `[]`    | Clockify project IDs to exclude                       |
+| `clockifyTaskIds`    | string[] | `[]`    | Clockify task IDs to exclude                          |
 
 Blacklisted entries are written to the local database with `status = "blacklisted"` and skipped on subsequent cycles.
 
@@ -128,8 +143,8 @@ curl -H "X-Api-Key: YOUR_API_KEY" \
 
 ## `database` — Optional
 
-| Field | Type | Default | Description |
-|---|---|---|---|
+| Field  | Type   | Default           | Description                                                       |
+|--------|--------|-------------------|-------------------------------------------------------------------|
 | `path` | string | `./data/wsync.db` | Path to the SQLite database file. Created automatically if absent |
 
 ---
@@ -141,5 +156,16 @@ The config loader (`src/config/loader.ts`) applies the following checks at start
 - `clockify.apiKey` and `clockify.workspaceId` must be non-empty strings.
 - `jira.baseUrl`, `jira.email`, and `jira.apiToken` must be non-empty strings.
 - When `webhook.enabled` is `true`, `webhook.secret` must be set and must not equal the placeholder `"YOUR_WEBHOOK_SECRET"`.
+- `sync.lookbackWindow` must match `<positive integer><s|m|h|d|w>` (e.g., `"30m"`, `"7d"`).
 
 All other fields are optional and fall back to the defaults listed above.
+
+---
+
+## CLI flags
+
+| Flag              | Description                                                                                                           |
+|-------------------|-----------------------------------------------------------------------------------------------------------------------|
+| `--config <path>` | Path to the config file (default: `./config.json`).                                                                   |
+| `--debug`         | Enable debug logging.                                                                                                 |
+| `--dry-run`       | Simulate the sync without creating Jira worklogs or writing sync records. Useful for previewing what would be synced. |

@@ -18,6 +18,7 @@
     "intervalMinutes": 5
   },
   "sync": {
+    "lookbackWindow": "24h",
     "blacklist": {
       "jiraKeys": [],
       "clockifyProjectIds": [],

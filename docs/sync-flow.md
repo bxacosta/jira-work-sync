@@ -6,8 +6,13 @@ Technical reference for the synchronization process from Clockify time entries t
 
 ## Overview
 
-WSync operates in **polling** mode by default: every N minutes it queries the Clockify API for recently completed time entries and creates
-corresponding worklogs in Jira. Webhook mode is available as an optional real-time trigger.
+WSync operates in one of three modes:
+
+- **Polling** (default): every N minutes it queries the Clockify API for recently completed time entries and creates corresponding worklogs in Jira.
+- **Webhook** (optional): Clockify pushes `TIMER_STOPPED` events in real time and the service processes them immediately.
+- **One-shot**: when both `polling.enabled` and `webhook.enabled` are `false`, the service runs a single sync cycle and exits.
+
+A `--dry-run` flag is available across all modes; it simulates the sync but does not create Jira worklogs or persist any sync records.
 
 ---
 
@@ -22,9 +27,8 @@ sequenceDiagram
     participant Engine as Sync Engine
     participant JApi as Jira API
     Timer ->> Poller: Tick (every N min)
-    Poller ->> DB: getLastSyncedTimestamp()
-    DB -->> Poller: timestamp or null (default: last 24h)
-    Poller ->> CApi: GET /user/{id}/time-entries?start={ts}
+    Poller ->> Poller: since = now - sync.lookbackWindow
+    Poller ->> CApi: GET /user/{id}/time-entries?start={since}
     CApi -->> Poller: TimeEntry[]
 
     loop For each completed entry
@@ -306,14 +310,41 @@ flowchart TD
 
 The poller runs every `polling.intervalMinutes` minutes (default: 5).
 
-1. Reads `getLastSyncedTimestamp()` from the database.
-2. If no timestamp exists, defaults to 24 hours ago.
-3. Calls `GET /time-entries?start={ts}&in-progress=false&page-size=50`.
-4. Processes only entries where `end !== null`.
-5. Calls `syncTimeEntry()` for each entry.
-6. Logs a cycle summary: `N checked, X synced, Y skipped, Z failed`.
+1. Computes `since = now - sync.lookbackWindow` (e.g., `now - 24h`).
+2. Calls `GET /time-entries?start={since}&in-progress=false&page-size=50`.
+3. Processes only entries where `end !== null`.
+4. Calls `syncTimeEntry()` for each entry.
+5. Logs a cycle summary: `N checked, X synced, Y skipped, Z failed`.
+
+The window is always relative to "now"; the last successful sync timestamp is **not** used to narrow it. Deduplication prevents entries
+within the window from being synced more than once.
 
 The first cycle is delayed 30 seconds after startup.
+
+---
+
+## One-Shot Mode
+
+When both `webhook.enabled` and `polling.enabled` are `false`, the service:
+
+1. Validates credentials.
+2. Runs a single sync cycle using the configured `sync.lookbackWindow`.
+3. Closes the database, removes the PID file, and exits.
+
+This is useful for ad-hoc syncs (e.g., from cron, CI, or one-off invocations) without leaving a long-running process.
+
+---
+
+## Dry-Run Mode
+
+Passing `--dry-run` to `wsync start` enables dry-run mode in all three operating modes. In this mode the engine:
+
+- Performs all reads (Clockify task lookup, Jira issue lookup, Jira worklog dedup check) as usual.
+- Logs the decision for each entry with a `[DRY-RUN]` tag, including the issue key and duration that *would* be synced.
+- **Skips** the `POST /issue/{key}/worklog` call to Jira.
+- **Skips** writes to the local `sync_records` table.
+
+Because no records are persisted, re-running dry-run produces the same output. Switch to a real run by removing the flag.
 
 ---
 

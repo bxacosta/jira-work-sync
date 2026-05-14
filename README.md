@@ -31,13 +31,14 @@ bun run start
 
 ## Commands
 
-| Command                              | Description                       |
-|--------------------------------------|-----------------------------------|
-| `bun run start`                      | Start the service                 |
-| `bun run dev`                        | Start in watch mode (auto-reload) |
-| `bun run status`                     | Print current service status      |
-| `bun run src/index.ts stop`          | Stop a running instance           |
-| `bun run src/index.ts start --debug` | Start with debug logging          |
+| Command                                | Description                                                                  |
+|----------------------------------------|------------------------------------------------------------------------------|
+| `bun run start`                        | Start the service                                                            |
+| `bun run dev`                          | Start in watch mode (auto-reload)                                            |
+| `bun run status`                       | Print current service status                                                 |
+| `bun run src/index.ts stop`            | Stop a running instance                                                      |
+| `bun run src/index.ts start --debug`   | Start with debug logging                                                     |
+| `bun run src/index.ts start --dry-run` | Simulate the sync without creating Jira worklogs or persisting sync records  |
 
 ## Configuration
 
@@ -46,9 +47,11 @@ for the full field reference, defaults, and validation rules.
 
 ## How It Works
 
-1. **Polling (primary):** Every N minutes, recent completed entries are fetched from Clockify and synced to Jira.
+1. **Polling (primary):** Every N minutes, completed entries within `sync.lookbackWindow` (default `24h`) are fetched from Clockify and synced to Jira.
 2. **Webhook (optional):** Clockify sends a `TIMER_STOPPED` event in real time; the service processes it immediately.
-3. **Deduplication:** A local SQLite record combined with custom properties on each Jira worklog prevents duplicate worklogs.
+3. **One-shot:** When both polling and webhook are disabled, the service runs a single sync cycle and exits — ideal for cron or CI invocations.
+4. **Dry-run:** Pass `--dry-run` to preview what would be synced without creating Jira worklogs or writing sync records.
+5. **Deduplication:** A local SQLite record combined with custom properties on each Jira worklog prevents duplicate worklogs.
 
 ## Project Structure
 
