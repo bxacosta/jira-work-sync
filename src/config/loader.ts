@@ -5,6 +5,7 @@ import { existsSync } from "node:fs";
 import { resolve } from "node:path";
 import { logger } from "../logger/index.ts";
 import { CONFIG_DEFAULTS } from "./defaults.ts";
+import { parseDurationMs } from "./duration.ts";
 import type { AppConfig } from "./schema.ts";
 
 function deepMerge<T extends Record<string, unknown>>(defaults: T, overrides: Record<string, unknown>): T {
@@ -84,6 +85,12 @@ export async function loadConfig(configPath?: string): Promise<AppConfig> {
 
     if (config.webhook?.enabled && (!config.webhook.secret || config.webhook.secret === "YOUR_WEBHOOK_SECRET")) {
         errors.push("webhook.secret is required when webhook is enabled");
+    }
+
+    try {
+        parseDurationMs(config.sync.lookbackWindow);
+    } catch (err) {
+        errors.push(`sync.lookbackWindow: ${(err as Error).message}`);
     }
 
     if (errors.length > 0) {

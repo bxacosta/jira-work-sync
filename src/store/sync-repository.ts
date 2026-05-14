@@ -61,11 +61,3 @@ export function getRecentRecords(limit = 20): SyncRecord[] {
     const db = getDatabase();
     return db.query("SELECT * FROM sync_records ORDER BY synced_at DESC LIMIT ?").all(limit) as SyncRecord[];
 }
-
-export function getLastSyncedTimestamp(): string | null {
-    const db = getDatabase();
-    const row = db.query("SELECT MAX(started_at) as last_ts FROM sync_records WHERE status = 'success'").get() as {
-        last_ts: string | null;
-    } | null;
-    return row?.last_ts ?? null;
-}

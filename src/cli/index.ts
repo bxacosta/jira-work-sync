@@ -21,6 +21,7 @@ function printUsage(): void {
     logger.raw("Options:");
     logger.raw("  --config <path>  Path to config file (default: ./config.json)");
     logger.raw("  --debug          Enable debug logging");
+    logger.raw("  --dry-run        Simulate sync without creating worklogs or writing sync records");
 }
 
 export async function runCli(args: string[]): Promise<void> {
@@ -28,6 +29,7 @@ export async function runCli(args: string[]): Promise<void> {
     const command = args.find((a) => !a.startsWith("--")) as Command | undefined;
     const configPath = args.includes("--config") ? args[args.indexOf("--config") + 1] : undefined;
     const debug = args.includes("--debug");
+    const dryRun = args.includes("--dry-run");
 
     if (debug) {
         logger.setDebug(true);
@@ -41,7 +43,7 @@ export async function runCli(args: string[]): Promise<void> {
     switch (command) {
         case "start": {
             const config = await loadConfig(configPath);
-            await startCommand(config);
+            await startCommand(config, { dryRun });
             break;
         }
 

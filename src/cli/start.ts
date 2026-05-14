@@ -5,13 +5,18 @@ import { existsSync, mkdirSync, unlinkSync, writeFileSync } from "node:fs";
 import { dirname } from "node:path";
 import { ClockifyClient } from "../clients/clockify/client.ts";
 import { JiraClient } from "../clients/jira/client.ts";
+import { parseDurationMs } from "../config/duration.ts";
 import type { AppConfig } from "../config/schema.ts";
 import { APP_DESCRIPTION, APP_VERSION, PID_FILE } from "../constants.ts";
 import { logger } from "../logger/index.ts";
-import { startPolling, stopPolling } from "../polling/poller.ts";
+import { runSyncCycle, startPolling, stopPolling } from "../polling/poller.ts";
 import { closeDatabase, initDatabase } from "../store/database.ts";
 import { SyncEngine } from "../sync/engine.ts";
 import { startWebhookServer, stopWebhookServer } from "../webhook/server.ts";
+
+export interface StartOptions {
+    dryRun: boolean;
+}
 
 function printBanner() {
     const d = "\x1b[2m"; // dim
@@ -46,8 +51,12 @@ function removePidFile() {
     }
 }
 
-export async function startCommand(config: AppConfig): Promise<void> {
+export async function startCommand(config: AppConfig, opts: StartOptions): Promise<void> {
     printBanner();
+
+    if (opts.dryRun) {
+        logger.warn("APP", "DRY-RUN mode -- no worklogs will be created and no sync records will be persisted.");
+    }
 
     // Check if already running
     if (existsSync(PID_FILE)) {
@@ -89,6 +98,8 @@ export async function startCommand(config: AppConfig): Promise<void> {
         process.exit(1);
     }
 
+    const lookbackMs = parseDurationMs(config.sync.lookbackWindow);
+
     // Print config summary
     logger.raw("");
     logger.info("APP", `Webhook:   ${config.webhook.enabled ? `port ${config.webhook.port}` : "disabled"}`);
@@ -96,6 +107,7 @@ export async function startCommand(config: AppConfig): Promise<void> {
         "APP",
         `Polling:   ${config.polling.enabled ? `every ${config.polling.intervalMinutes} min` : "disabled"}`
     );
+    logger.info("APP", `Lookback:  ${config.sync.lookbackWindow}`);
 
     const bl = config.sync.blacklist;
     const blCount = bl.jiraKeys.length + bl.clockifyProjectIds.length + bl.clockifyTaskIds.length;
@@ -103,7 +115,17 @@ export async function startCommand(config: AppConfig): Promise<void> {
     logger.raw("");
 
     // Create sync engine
-    const syncEngine = new SyncEngine(clockify, jira, config);
+    const syncEngine = new SyncEngine(clockify, jira, config, opts.dryRun);
+
+    // One-shot mode: when both webhook and polling are disabled, run a single sync cycle and exit.
+    if (!(config.webhook.enabled || config.polling.enabled)) {
+        logger.info("APP", "Webhook and polling are disabled -- running a single sync cycle.");
+        await runSyncCycle(clockify, userId, syncEngine, lookbackMs, "SYNC");
+        closeDatabase();
+        removePidFile();
+        logger.info("APP", "Done.");
+        return;
+    }
 
     // Start webhook server (if enabled)
     if (config.webhook.enabled) {
@@ -114,7 +136,7 @@ export async function startCommand(config: AppConfig): Promise<void> {
 
     // Start polling (if enabled)
     if (config.polling.enabled) {
-        startPolling(clockify, userId, syncEngine, config.polling.intervalMinutes);
+        startPolling(clockify, userId, syncEngine, config.polling.intervalMinutes, lookbackMs);
     } else {
         logger.info("POLL", "Polling disabled by configuration");
     }

@@ -31,6 +31,8 @@ export interface BlacklistConfig {
 
 export interface SyncConfig {
     blacklist: BlacklistConfig;
+    /** Duration string (e.g., "1h", "24h", "7d") — window of time entries each cycle considers, counted back from now. */
+    lookbackWindow: string;
 }
 
 export interface DatabaseConfig {

@@ -19,6 +19,7 @@ export const CONFIG_DEFAULTS: DeepPartial<AppConfig> = {
             clockifyProjectIds: [],
             clockifyTaskIds: [],
         },
+        lookbackWindow: "24h",
     },
     database: {
         path: "./data/wsync.db",

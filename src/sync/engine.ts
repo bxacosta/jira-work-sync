@@ -6,7 +6,7 @@ import type { ClockifyTask, ClockifyTimeEntry } from "../clients/clockify/types.
 import type { JiraClient } from "../clients/jira/client.ts";
 import type { AppConfig } from "../config/schema.ts";
 import { logger } from "../logger/index.ts";
-import { createSyncRecord, findByClockifyEntryId } from "../store/sync-repository.ts";
+import { createSyncRecord, findByClockifyEntryId, type SyncRecord } from "../store/sync-repository.ts";
 import { extractIssueKey } from "./extractor.ts";
 import { filterTimeEntry } from "./filter.ts";
 import { calculateDurationSeconds, formatDuration, mapToWorklog } from "./mapper.ts";
@@ -26,11 +26,26 @@ export class SyncEngine {
     private readonly clockify: ClockifyClient;
     private readonly jira: JiraClient;
     private readonly config: AppConfig;
+    private readonly dryRun: boolean;
 
-    constructor(clockify: ClockifyClient, jira: JiraClient, config: AppConfig) {
+    constructor(clockify: ClockifyClient, jira: JiraClient, config: AppConfig, dryRun = false) {
         this.clockify = clockify;
         this.jira = jira;
         this.config = config;
+        this.dryRun = dryRun;
+    }
+
+    /** Tag prefix added to engine logs when dry-run is active. */
+    private get tag(): string {
+        return this.dryRun ? "[DRY-RUN] " : "";
+    }
+
+    /** Persists a sync record unless dry-run is active. */
+    private writeRecord(record: Omit<SyncRecord, "id" | "synced_at">): void {
+        if (this.dryRun) {
+            return;
+        }
+        createSyncRecord(record);
     }
 
     /** Fetches a Clockify task, using an in-memory cache to avoid redundant API calls. */
@@ -67,12 +82,12 @@ export class SyncEngine {
         const entryId = entry.id;
         const ctx = source.toUpperCase();
         if (filterResult.level === "warn") {
-            logger.warn(ctx, `SKIP ${entryId} -- ${filterResult.reason}`);
+            logger.warn(ctx, `${this.tag}SKIP ${entryId} -- ${filterResult.reason}`);
         } else {
-            logger.info(ctx, `SKIP ${entryId} -- ${filterResult.reason}`);
+            logger.info(ctx, `${this.tag}SKIP ${entryId} -- ${filterResult.reason}`);
         }
         const status: SyncResultStatus = filterResult.reason.includes("blacklisted") ? "blacklisted" : "skipped";
-        createSyncRecord({
+        this.writeRecord({
             clockify_entry_id: entryId,
             jira_issue_key: issueKey ?? "UNKNOWN",
             jira_worklog_id: null,
@@ -133,8 +148,8 @@ export class SyncEngine {
             // Step 5: Validate issue exists in Jira
             const issue = await this.jira.getIssue(key);
             if (!issue) {
-                logger.warn(ctx, `${key} -- Issue not found in Jira`);
-                createSyncRecord({
+                logger.warn(ctx, `${this.tag}${key} -- Issue not found in Jira`);
+                this.writeRecord({
                     clockify_entry_id: entryId,
                     jira_issue_key: key,
                     jira_worklog_id: null,
@@ -151,8 +166,11 @@ export class SyncEngine {
             const startMs = new Date(entry.timeInterval.start).getTime() - 24 * 60 * 60 * 1000;
             const duplicateWorklogId = await this.findJiraDuplicateWorklog(key, entryId, startMs);
             if (duplicateWorklogId) {
-                logger.info(ctx, `SKIP ${key} -- Duplicate detected in Jira (worklog ${duplicateWorklogId})`);
-                createSyncRecord({
+                logger.info(
+                    ctx,
+                    `${this.tag}SKIP ${key} -- Duplicate detected in Jira (worklog ${duplicateWorklogId})`
+                );
+                this.writeRecord({
                     clockify_entry_id: entryId,
                     jira_issue_key: key,
                     jira_worklog_id: duplicateWorklogId,
@@ -165,13 +183,19 @@ export class SyncEngine {
                 return { status: "skipped", issueKey: key, details: "Duplicate in Jira" };
             }
 
-            // Step 7: Create worklog in Jira
+            // Step 7: Create worklog in Jira (skipped in dry-run)
             const payload = mapToWorklog(entry, key, issue.fields.summary, source);
-            const worklog = await this.jira.addWorklog(key, payload);
             const duration = formatDuration(payload.timeSpentSeconds);
 
+            if (this.dryRun) {
+                logger.info(ctx, `[DRY-RUN] WOULD SYNC [${key}] ${duration} (${issue.fields.summary})`);
+                return { status: "success", issueKey: key, details: `[DRY-RUN] Would sync ${duration}` };
+            }
+
+            const worklog = await this.jira.addWorklog(key, payload);
+
             // Step 8: Record success
-            createSyncRecord({
+            this.writeRecord({
                 clockify_entry_id: entryId,
                 jira_issue_key: key,
                 jira_worklog_id: worklog.id,
@@ -186,11 +210,11 @@ export class SyncEngine {
             return { status: "success", issueKey: key, details: `Synced ${duration}` };
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
-            logger.error(ctx, `Entry ${entryId} -- ${message}`, err);
+            logger.error(ctx, `${this.tag}Entry ${entryId} -- ${message}`, err);
 
             // Try to record the failure
             try {
-                createSyncRecord({
+                this.writeRecord({
                     clockify_entry_id: entryId,
                     jira_issue_key: "ERROR",
                     jira_worklog_id: null,
