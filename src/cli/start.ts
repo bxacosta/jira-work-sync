@@ -60,8 +60,10 @@ export async function startCommand(config: AppConfig, opts: StartOptions): Promi
 
     // Check if already running
     if (existsSync(PID_FILE)) {
-        const pid = Number.parseInt(Bun.file(PID_FILE).toString(), 10);
-        logger.warn("APP", `PID file exists (pid ${pid}). Another instance may be running.`);
+        const pidContent = (await Bun.file(PID_FILE).text()).trim();
+        const pid = Number.parseInt(pidContent, 10);
+        const pidLabel = Number.isNaN(pid) ? `invalid content "${pidContent}"` : `pid ${pid}`;
+        logger.warn("APP", `PID file exists (${pidLabel}). Another instance may be running.`);
         logger.warn("APP", `If not, delete ${PID_FILE} manually and retry.`);
     }
 
