@@ -10,8 +10,11 @@
   },
   "scripts": {
     "start": "bun run src/index.ts start",
+    "start:dry-run": "bun run src/index.ts start --dry-run",
+    "start:debug": "bun run src/index.ts start --debug",
     "dev": "bun --watch run src/index.ts start",
     "status": "bun run src/index.ts status",
+    "stop": "bun run src/index.ts stop",
     "typecheck": "tsc --noEmit",
     "fix": "ultracite fix"
   },

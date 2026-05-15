@@ -31,14 +31,16 @@ bun run start
 
 ## Commands
 
-| Command                                | Description                                                                  |
-|----------------------------------------|------------------------------------------------------------------------------|
-| `bun run start`                        | Start the service                                                            |
-| `bun run dev`                          | Start in watch mode (auto-reload)                                            |
-| `bun run status`                       | Print current service status                                                 |
-| `bun run src/index.ts stop`            | Stop a running instance                                                      |
-| `bun run src/index.ts start --debug`   | Start with debug logging                                                     |
-| `bun run src/index.ts start --dry-run` | Simulate the sync without creating Jira worklogs or persisting sync records  |
+| Command                 | Description                                                                 |
+|-------------------------|-----------------------------------------------------------------------------|
+| `bun run start`         | Start the service                                                           |
+| `bun run start:dry-run` | Simulate the sync without creating Jira worklogs or persisting sync records |
+| `bun run start:debug`   | Start with debug logging                                                    |
+| `bun run dev`           | Start in watch mode (auto-reload)                                           |
+| `bun run status`        | Print current service status                                                |
+| `bun run stop`          | Stop a running instance                                                     |
+
+Extra CLI flags can also be appended directly, e.g. `bun run start -- --dry-run --debug --config ./other.json`.
 
 ## Configuration
 
