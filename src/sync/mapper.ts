@@ -39,6 +39,44 @@ export function formatJiraStarted(isoString: string): string {
 }
 
 /**
+ * Formats a Clockify time entry interval in the given IANA timezone.
+ * Shows times as the user sees them in Clockify's UI, regardless of the
+ * timezone of the machine running the sync.
+ *
+ * "2026-05-19T14:30:00Z" in "America/Guayaquil" → "19/05/2026 - 09:30 → 10:50 UTC-5"
+ */
+export function formatEntryInterval(start: string, end: string | null, timezone: string): string {
+    const fmtParts = (iso: string) => {
+        const parts = new Intl.DateTimeFormat("en-GB", {
+            timeZone: timezone,
+            day: "2-digit",
+            month: "2-digit",
+            year: "numeric",
+            hour: "2-digit",
+            minute: "2-digit",
+            hour12: false,
+        }).formatToParts(new Date(iso));
+        const get = (type: string) => parts.find((p) => p.type === type)?.value ?? "";
+        return { date: `${get("day")}/${get("month")}/${get("year")}`, time: `${get("hour")}:${get("minute")}` };
+    };
+
+    // "GMT-5" → "UTC-5", "GMT+5:30" → "UTC+5:30"
+    const tzLabel = (new Intl.DateTimeFormat("en", { timeZone: timezone, timeZoneName: "shortOffset" })
+        .formatToParts(new Date(start))
+        .find((p) => p.type === "timeZoneName")?.value ?? "UTC").replace("GMT", "UTC");
+
+    const s = fmtParts(start);
+    const startStr = `${s.date} - ${s.time}`;
+
+    if (!end) return `${startStr} ${tzLabel}`;
+
+    const e = fmtParts(end);
+    const sameDay = s.date === e.date;
+    const endStr = sameDay ? e.time : `${e.date} - ${e.time}`;
+    return `${startStr} → ${endStr} ${tzLabel}`;
+}
+
+/**
  * Formats a duration in seconds to a human-readable string.
  */
 export function formatDuration(seconds: number): string {

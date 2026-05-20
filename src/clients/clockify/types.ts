@@ -6,6 +6,9 @@ export interface ClockifyUser {
     email: string;
     id: string;
     name: string;
+    settings: {
+        timeZone: string;
+    };
     status: string;
 }
 

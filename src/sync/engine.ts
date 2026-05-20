@@ -9,7 +9,7 @@ import { logger } from "../logger/index.ts";
 import { createSyncRecord, findByClockifyEntryId, type SyncRecord } from "../store/sync-repository.ts";
 import { extractIssueKey } from "./extractor.ts";
 import { filterTimeEntry } from "./filter.ts";
-import { calculateDurationSeconds, formatDuration, mapToWorklog } from "./mapper.ts";
+import { calculateDurationSeconds, formatDuration, formatEntryInterval, mapToWorklog } from "./mapper.ts";
 
 export type SyncResultStatus = "success" | "skipped" | "failed" | "blacklisted";
 
@@ -29,12 +29,14 @@ export class SyncEngine {
     private readonly jira: JiraClient;
     private readonly config: AppConfig;
     private readonly dryRun: boolean;
+    private readonly userTimezone: string;
 
-    constructor(clockify: ClockifyClient, jira: JiraClient, config: AppConfig, dryRun = false) {
+    constructor(clockify: ClockifyClient, jira: JiraClient, config: AppConfig, dryRun = false, userTimezone = "UTC") {
         this.clockify = clockify;
         this.jira = jira;
         this.config = config;
         this.dryRun = dryRun;
+        this.userTimezone = userTimezone;
     }
 
     /** Tag prefix added to engine logs when dry-run is active. */
@@ -186,8 +188,10 @@ export class SyncEngine {
             const payload = mapToWorklog(entry, key, issue.fields.summary, source);
             const duration = formatDuration(payload.timeSpentSeconds);
 
+            const interval = formatEntryInterval(entry.timeInterval.start, entry.timeInterval.end, this.userTimezone);
+
             if (this.dryRun) {
-                logger.info(LOG_CTX, `[DRY-RUN] WOULD SYNC [${key}] ${duration} (${issue.fields.summary})`);
+                logger.info(LOG_CTX, `[DRY-RUN] WOULD SYNC [${key}] ${duration} | ${interval} (${issue.fields.summary})`);
                 return { status: "success", issueKey: key, details: `[DRY-RUN] Would sync ${duration}` };
             }
 
@@ -205,7 +209,7 @@ export class SyncEngine {
                 source,
             });
 
-            logger.info(LOG_CTX, `SYNCED [${key}] ${duration} -> Jira worklog #${worklog.id}`);
+            logger.info(LOG_CTX, `SYNCED [${key}] ${duration} | ${interval} -> Jira worklog #${worklog.id}`);
             return { status: "success", issueKey: key, details: `Synced ${duration}` };
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);

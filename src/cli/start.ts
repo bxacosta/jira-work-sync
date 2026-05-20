@@ -81,9 +81,11 @@ export async function startCommand(config: AppConfig, opts: StartOptions): Promi
     logger.info("APP", "Validating credentials...");
 
     let userId: string;
+    let userTimezone = "UTC";
     try {
         const clockifyUser = await clockify.getCurrentUser();
         userId = clockifyUser.id;
+        userTimezone = clockifyUser.settings?.timeZone ?? "UTC";
         logger.info("APP", `Clockify: ${clockifyUser.name} (${clockifyUser.email})`);
     } catch (err) {
         logger.error("APP", "Failed to authenticate with Clockify. Check your API key.", err);
@@ -117,7 +119,7 @@ export async function startCommand(config: AppConfig, opts: StartOptions): Promi
     logger.raw("");
 
     // Create sync engine
-    const syncEngine = new SyncEngine(clockify, jira, config, opts.dryRun);
+    const syncEngine = new SyncEngine(clockify, jira, config, opts.dryRun, userTimezone);
 
     // One-shot mode: when both webhook and polling are disabled, run a single sync cycle and exit.
     if (!(config.webhook.enabled || config.polling.enabled)) {
