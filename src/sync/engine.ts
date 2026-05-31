@@ -83,10 +83,14 @@ export class SyncEngine {
         filterResult: { reason: string; level: string }
     ): SyncResult {
         const entryId = entry.id;
+        const label = issueKey ? `[${issueKey}]` : `[${entryId.slice(0, 8)}...]`;
+        const dur = entry.timeInterval.end ? ` ${formatDuration(calculateDurationSeconds(entry))}` : "";
+        const interval = formatEntryInterval(entry.timeInterval.start, entry.timeInterval.end, this.userTimezone);
+        const logMsg = `${this.tag}SKIP ${label}${dur} | ${interval} -> ${filterResult.reason}`;
         if (filterResult.level === "warn") {
-            logger.warn(LOG_CTX, `${this.tag}SKIP ${entryId} -- ${filterResult.reason}`);
+            logger.warn(LOG_CTX, logMsg);
         } else {
-            logger.info(LOG_CTX, `${this.tag}SKIP ${entryId} -- ${filterResult.reason}`);
+            logger.info(LOG_CTX, logMsg);
         }
         const status: SyncResultStatus = filterResult.reason.includes("blacklisted") ? "blacklisted" : "skipped";
         this.writeRecord({
@@ -146,10 +150,14 @@ export class SyncEngine {
             const keySource = extraction?.source === "task" ? "task metadata" : "description";
             logger.debug(LOG_CTX, `Issue key ${key} extracted from ${keySource}`);
 
+            // Pre-compute duration and interval — shared across steps 5-8 log lines
+            const duration = formatDuration(calculateDurationSeconds(entry));
+            const interval = formatEntryInterval(entry.timeInterval.start, entry.timeInterval.end, this.userTimezone);
+
             // Step 5: Validate issue exists in Jira
             const issue = await this.jira.getIssue(key);
             if (!issue) {
-                logger.warn(LOG_CTX, `${this.tag}${key} -- Issue not found in Jira`);
+                logger.warn(LOG_CTX, `${this.tag}FAILED [${key}] ${duration} | ${interval} -> issue not found in Jira`);
                 this.writeRecord({
                     clockify_entry_id: entryId,
                     jira_issue_key: key,
@@ -167,10 +175,7 @@ export class SyncEngine {
             const startMs = new Date(entry.timeInterval.start).getTime() - 24 * 60 * 60 * 1000;
             const duplicateWorklogId = await this.findJiraDuplicateWorklog(key, entryId, startMs);
             if (duplicateWorklogId) {
-                logger.info(
-                    LOG_CTX,
-                    `${this.tag}SKIP ${key} -- Duplicate detected in Jira (worklog ${duplicateWorklogId})`
-                );
+                logger.info(LOG_CTX, `${this.tag}SKIP [${key}] ${duration} | ${interval} -> duplicate (worklog #${duplicateWorklogId})`);
                 this.writeRecord({
                     clockify_entry_id: entryId,
                     jira_issue_key: key,
@@ -186,12 +191,9 @@ export class SyncEngine {
 
             // Step 7: Create worklog in Jira (skipped in dry-run)
             const payload = mapToWorklog(entry, key, issue.fields.summary, source);
-            const duration = formatDuration(payload.timeSpentSeconds);
-
-            const interval = formatEntryInterval(entry.timeInterval.start, entry.timeInterval.end, this.userTimezone);
 
             if (this.dryRun) {
-                logger.info(LOG_CTX, `[DRY-RUN] WOULD SYNC [${key}] ${duration} | ${interval} (${issue.fields.summary})`);
+                logger.info(LOG_CTX, `[DRY-RUN] WOULD SYNC [${key}] ${duration} | ${interval}`);
                 return { status: "success", issueKey: key, details: `[DRY-RUN] Would sync ${duration}` };
             }
 
@@ -209,7 +211,7 @@ export class SyncEngine {
                 source,
             });
 
-            logger.info(LOG_CTX, `SYNCED [${key}] ${duration} | ${interval} -> Jira worklog #${worklog.id}`);
+            logger.info(LOG_CTX, `SYNCED [${key}] ${duration} | ${interval} -> worklog #${worklog.id}`);
             return { status: "success", issueKey: key, details: `Synced ${duration}` };
         } catch (err) {
             const message = err instanceof Error ? err.message : String(err);
